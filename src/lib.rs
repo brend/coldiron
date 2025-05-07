@@ -88,28 +88,51 @@ impl Image {
     }
 }
 
-fn write_ppm_binary<W: Write>(
+fn write_pbm_binary<W: Write>(
     width: usize,
     height: usize,
-    data: &Vec<Color8>,
+    data: &Vec<u8>,
     writer: &mut W,
 ) -> std::io::Result<()> {
-    write_header("P6", width, height, writer, Some(255))?;
-    for pixel in data {
-        writer.write_all(&[pixel.red, pixel.green, pixel.blue])?;
+    write_header("P4", width, height, writer, None)?;
+
+    for y in 0..height {
+        let mut byte = 0u8;
+        let mut bit_count = 0;
+
+        for x in 0..width {
+            let index = y * width + x;
+            let bit = if data[index] != 0 { 0 } else { 1 }; // 1 is black, 0 is white in PBM
+            byte = (byte << 1) | bit;
+            bit_count += 1;
+
+            if bit_count == 8 {
+                writer.write_all(&[byte])?;
+                byte = 0;
+                bit_count = 0;
+            }
+        }
+
+        // If the row's width isn't divisible by 8, pad the last byte with zeros
+        if bit_count > 0 {
+            byte <<= 8 - bit_count;
+            writer.write_all(&[byte])?;
+        }
     }
+
     Ok(())
 }
 
-fn write_ppm_ascii<W: Write>(
+fn write_pbm_ascii<W: Write>(
     width: usize,
     height: usize,
-    data: &Vec<Color8>,
+    data: &Vec<u8>,
     writer: &mut W,
 ) -> std::io::Result<()> {
-    write_header("P3", width, height, writer, Some(255))?;
-    for pixel in data {
-        write!(writer, "{} {} {} ", pixel.red, pixel.green, pixel.blue)?;
+    write_header("P1", width, height, writer, None)?;
+    for &value in data {
+        let bit = if value == 0 { 1 } else { 0 };
+        write!(writer, "{} ", bit)?;
     }
     Ok(())
 }
@@ -138,30 +161,6 @@ fn write_pgm_ascii<W: Write>(
     Ok(())
 }
 
-fn write_pbm_binary<W: Write>(
-    width: usize,
-    height: usize,
-    data: &Vec<u8>,
-    writer: &mut W,
-) -> std::io::Result<()> {
-    write_header("P4", width, height, writer, None)?;
-    writer.write(data)?;
-    Ok(())
-}
-
-fn write_pbm_ascii<W: Write>(
-    width: usize,
-    height: usize,
-    data: &Vec<u8>,
-    writer: &mut W,
-) -> std::io::Result<()> {
-    write_header("P1", width, height, writer, None)?;
-    for &value in data {
-        write!(writer, "{} ", value)?;
-    }
-    Ok(())
-}
-
 fn write_header<W: Write>(
     magic_number: &str,
     width: usize,
@@ -173,6 +172,32 @@ fn write_header<W: Write>(
     writeln!(writer, "{} {}", width, height)?;
     if let Some(max_value) = max_value {
         writeln!(writer, "{}", max_value)?;
+    }
+    Ok(())
+}
+
+fn write_ppm_binary<W: Write>(
+    width: usize,
+    height: usize,
+    data: &Vec<Color8>,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    write_header("P6", width, height, writer, Some(255))?;
+    for pixel in data {
+        writer.write_all(&[pixel.red, pixel.green, pixel.blue])?;
+    }
+    Ok(())
+}
+
+fn write_ppm_ascii<W: Write>(
+    width: usize,
+    height: usize,
+    data: &Vec<Color8>,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    write_header("P3", width, height, writer, Some(255))?;
+    for pixel in data {
+        write!(writer, "{} {} {} ", pixel.red, pixel.green, pixel.blue)?;
     }
     Ok(())
 }
