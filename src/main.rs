@@ -12,7 +12,7 @@ fn main() {
                 Format::Pixmap => "ppm",
             };
             let file =
-                std::fs::File::create(&format!("output_{:?}_{:?}.{}", format, encoding, extension))
+                std::fs::File::create(format!("output_{:?}_{:?}.{}", format, encoding, extension))
                     .expect("Failed to create file");
             let mut writer = BufWriter::new(file);
             image
