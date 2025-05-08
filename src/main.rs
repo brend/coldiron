@@ -1,6 +1,6 @@
 use std::io::BufWriter;
 
-use netpbm::{Encoding, Format, Image};
+use coldiron::{Encoding, Format, Image};
 
 fn main() {
     for format in &[Format::Bitmap, Format::Graymap, Format::Pixmap] {
