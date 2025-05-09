@@ -1,25 +1,30 @@
-use std::io::BufWriter;
+use std::{fmt::format, io::BufWriter};
 
-use coldiron::{Encoding, Format, Image};
+use coldiron::{Encoding, Format, Image, Kernel};
 
 fn main() {
-    for format in &[Format::Bitmap, Format::Graymap, Format::Pixmap] {
-        for encoding in &[Encoding::Ascii, Encoding::Binary] {
-            let image = create_test_image(*format);
-            let extension = match format {
-                Format::Bitmap => "pbm",
-                Format::Graymap => "pgm",
-                Format::Pixmap => "ppm",
-            };
-            let file =
-                std::fs::File::create(format!("output_{:?}_{:?}.{}", format, encoding, extension))
-                    .expect("Failed to create file");
-            let mut writer = BufWriter::new(file);
-            image
-                .write_to(&mut writer, *encoding)
-                .expect("Failed to write image to file");
+    let mut src = Image::new(Format::Graymap, 128, 128);
+
+    for x in 0..128 {
+        for y in 50..70 {
+            src.set_pixel(x, y, 255);
         }
     }
+
+    let file = std::fs::File::create("src.pgm").expect("Failed to create file");
+    let mut writer = BufWriter::new(file);
+    src.write_to(&mut writer, Encoding::Binary)
+        .expect("Failed to write image to file");
+
+    let kernel = Kernel::new(3, vec![0.0, 0.125, 0.0, 0.125, 0.5, 0.125, 0.0, 0.125, 0.0]);
+    let mut dst = Image::new(Format::Graymap, 128, 128);
+
+    kernel.apply(&src, &mut dst);
+
+    let file = std::fs::File::create("dst.pgm").expect("Failed to create file");
+    let mut writer = BufWriter::new(file);
+    dst.write_to(&mut writer, Encoding::Binary)
+        .expect("Failed to write image to file");
 }
 
 fn create_test_image(format: Format) -> Image {

@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{self, BufRead, BufReader, Read, Write};
 
 /// Format of a Netpbm image
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -11,6 +11,17 @@ pub enum Format {
     Pixmap,
 }
 
+impl Format {
+    pub fn from_magic_number(magic_number: &str) -> Option<Self> {
+        match magic_number {
+            "P1" | "P4" => Some(Format::Bitmap),
+            "P2" | "P5" => Some(Format::Graymap),
+            "P3" | "P6" => Some(Format::Pixmap),
+            _ => None,
+        }
+    }
+}
+
 /// Encoding for writing a Netpbm image
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Encoding {
@@ -18,6 +29,16 @@ pub enum Encoding {
     Ascii,
     /// Color values stored as binary values
     Binary,
+}
+
+impl Encoding {
+    pub fn from_magic_number(magic_number: &str) -> Option<Encoding> {
+        match magic_number {
+            "P1" | "P3" | "P5" => Some(Encoding::Ascii),
+            "P2" | "P4" | "P6" => Some(Encoding::Binary),
+            _ => None,
+        }
+    }
 }
 
 /// RGB color structure with 8 bits per color channel,
@@ -80,12 +101,28 @@ impl Image {
         }
     }
 
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
     /// Set the pixel at the given coordinates to a new color
     pub fn set_pixel(&mut self, x: usize, y: usize, value: u8) {
         match &mut self.data {
             ImageData::Bitmap(data) => data[y * self.width + x] = value,
             ImageData::Graymap8(data) => data[y * self.width + x] = value,
             ImageData::Pixmap(data) => data[y * self.width + x] = Color8::new(value, value, value),
+        }
+    }
+
+    pub fn get_pixel(&self, x: usize, y: usize) -> u8 {
+        match &self.data {
+            ImageData::Bitmap(data) => data[y * self.width + x],
+            ImageData::Graymap8(data) => data[y * self.width + x],
+            ImageData::Pixmap(_) => unimplemented!(),
         }
     }
 
@@ -112,6 +149,182 @@ impl Image {
             }
         }
     }
+
+    pub fn read_from<R: Read>(reader: &mut R) -> io::Result<Self> {
+        let mut reader = BufReader::new(reader)
+        let (magic_number, width, height, max_value) = read_header(&mut reader)?;
+        let format = Format::from_magic_number(&magic_number)?;
+        let encoding = Encoding::from_magic_number(&magic_number)?;
+        let data = match (format, encoding) {
+            (Format::Bitmap, Encoding::Ascii) => read_pbm_ascii(&mut reader, width, height),
+            (Format::Bitmap, Encoding::Binary) => read_pbm_binary(&mut reader, width, height),
+            (Format::Graymap, Encoding::Ascii) => read_pgm_ascii(&mut reader, width, height, max_value),
+            (Format::Graymap, Encoding::Binary) => {
+                read_pgm_binary(&mut reader, width, height, max_value)
+            }
+            (Format::Pixmap, Encoding::Ascii) => read_ppm_ascii(&mut reader, width, height, max_value),
+            (Format::Pixmap, Encoding::Binary) => read_ppm_binary(&mut reader, width, height, max_value),
+            _ => unimplemented!(),
+        }?;
+
+        Ok(Image {
+            format,
+            width,
+            height,
+            data,
+        })
+    }
+}
+
+fn read_pbm_ascii<R: Read>(reader: &mut BufReader<R>, width: usize, height: usize) -> io::Result<ImageData> {
+    let byte_count = height * width;
+    let mut bytes = vec![0u8; byte_count];
+    let mut line = String::new();
+
+    let mut next_line = || -> io::Result<String> {
+        line.clear();
+        loop {
+            let bytes_read = reader.read_line(&mut line)?;
+            if bytes_read == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Unexpected EOF",
+                ));
+            }
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                return Ok(trimmed.to_string());
+            }
+            line.clear();
+        }
+    };
+
+    for _ in 0..byte_count {
+        let line = next_line()?;
+        for token in line.chars() {
+            if token.is_whitespace() {
+                continue;
+            }
+            let b = if token == '0' { 0 } else { 1 };
+            bytes.push(b);
+        }
+    }
+
+    Ok(ImageData::Bitmap(bytes))
+}
+
+fn read_pbm_binary<R: Read>(reader: &mut BufReader<R>, width: usize, height: usize) -> io::Result<ImageData> {
+    let byte_count = height * ((width + 7) / 8);
+    let mut buf = vec![0u8; byte_count];
+    reader.read_exact(&mut buf)?;
+    // the bitmap is packed into bytes we need to unpack
+    let mut bytes = vec![0u8; height * width];
+    for b in buf {
+        for i in 0..8 {
+            let bit = if b & (1 << i) == 0 { 0 } else { 1};
+            bytes.push(bit)
+        }
+    }
+    Ok(ImageData::Bitmap(bytes))
+}
+
+fn read_pgm_ascii<R: Read>(
+    reader: &mut R,
+    width: usize,
+    height: usize,
+    max_value: Option<u16>,
+) -> io::Result<ImageData> {
+    unimplemented!()
+}
+
+fn read_pgm_binary<R: Read>(
+    reader: &mut R,
+    width: usize,
+    height: usize,
+    max_value: Option<u16>,
+) -> io::Result<ImageData> {
+    unimplemented!()
+}
+
+fn read_ppm_ascii<R: Read>(
+    reader: &mut R,
+    width: usize,
+    height: usize,
+    max_value: Option<u16>,
+) -> io::Result<ImageData> {
+    unimplemented!()
+}
+
+fn read_ppm_binary<R: Read>(
+    reader: &mut R,
+    width: usize,
+    height: usize,
+    max_value: Option<u16>,
+) -> io::Result<ImageData> {
+    unimplemented!()
+}
+
+fn read_header<R: Read>(reader: &mut R) -> io::Result<(String, usize, usize, Option<u16>)> {
+    let mut buf_reader = BufReader::new(reader);
+    let mut line = String::new();
+
+    // Helper to read the next non-comment, non-empty line
+    let mut next_line = || -> io::Result<String> {
+        line.clear();
+        loop {
+            let bytes_read = buf_reader.read_line(&mut line)?;
+            if bytes_read == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Unexpected EOF",
+                ));
+            }
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                return Ok(trimmed.to_string());
+            }
+            line.clear();
+        }
+    };
+
+    // Read magic number
+    let magic = next_line()?;
+
+    // Read width and height (might be on same line or separate lines)
+    let mut dimensions = Vec::new();
+    while dimensions.len() < 2 {
+        let text = next_line()?;
+        let tokens: Vec<_> = text.split_whitespace().collect();
+        for tok in tokens {
+            if let Ok(n) = tok.parse::<usize>() {
+                dimensions.push(n);
+                if dimensions.len() == 2 {
+                    break;
+                }
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid dimension value",
+                ));
+            }
+        }
+    }
+
+    let width = dimensions[0];
+    let height = dimensions[1];
+
+    // For binary formats like P5 or P6, there is a maxval line before the pixel data
+    let maxval = match magic.as_str() {
+        "P2" | "P3" | "P5" | "P6" => {
+            let val = next_line()?
+                .parse::<u16>()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid maxval"))?;
+            Some(val)
+        }
+        _ => None, // e.g., PBM formats like P1, P4 don't use a maxval
+    };
+
+    Ok((magic, width, height, maxval))
 }
 
 /// Write BitMap image data to a writer using binary encoding
@@ -233,4 +446,36 @@ fn write_ppm_ascii<W: Write>(
         write!(writer, "{} {} {} ", pixel.red, pixel.green, pixel.blue)?;
     }
     Ok(())
+}
+
+pub struct Kernel {
+    size: usize,
+    weights: Vec<f32>,
+}
+
+impl Kernel {
+    pub fn new(size: usize, weights: Vec<f32>) -> Kernel {
+        assert!(weights.len() == size * size);
+        Kernel { size, weights }
+    }
+
+    pub fn apply(&self, src: &Image, dst: &mut Image) {
+        assert!(src.width() == dst.width());
+        assert!(src.height() == dst.height());
+        let k = self.size;
+        // for y in 0..src.height() {
+        //     for x in 0..src.width() {
+        for y in 1..src.height() - 1 {
+            for x in 1..src.width() - 1 {
+                let mut value = 0.0;
+                for j in 0..k {
+                    for i in 0..k {
+                        value += src.get_pixel(x + i - k / 2, y + j - k / 2) as f32
+                            * self.weights[j * k + i];
+                    }
+                }
+                dst.set_pixel(x, y, value as u8);
+            }
+        }
+    }
 }
