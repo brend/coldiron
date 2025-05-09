@@ -227,7 +227,7 @@ fn read_pbm_binary<R: Read>(
     width: usize,
     height: usize,
 ) -> io::Result<ImageData> {
-    let byte_count = height * ((width + 7) / 8);
+    let byte_count = height * width.div_ceil(8);
     let mut buf = vec![0u8; byte_count];
     reader.read_exact(&mut buf)?;
     // the bitmap is packed into bytes we need to unpack
