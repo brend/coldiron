@@ -170,7 +170,6 @@ impl Image {
             (Format::Pixmap, Encoding::Binary) => {
                 read_ppm_binary(&mut reader, width, height, max_value)
             }
-            _ => unimplemented!(),
         }?;
 
         Ok(Image {
@@ -243,12 +242,46 @@ fn read_pbm_binary<R: Read>(
 }
 
 fn read_pgm_ascii<R: Read>(
-    reader: &mut R,
+    reader: &mut BufReader<R>,
     width: usize,
     height: usize,
     max_value: Option<u16>,
 ) -> io::Result<ImageData> {
-    unimplemented!()
+    let byte_count = height * width;
+    let mut bytes = Vec::with_capacity(byte_count);
+    let mut line = String::new();
+
+    let mut next_line = || -> io::Result<String> {
+        line.clear();
+        loop {
+            let bytes_read = reader.read_line(&mut line)?;
+            if bytes_read == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Unexpected EOF",
+                ));
+            }
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                return Ok(trimmed.to_string());
+            }
+            line.clear();
+        }
+    };
+
+    while bytes.len() < byte_count {
+        let line = next_line()?;
+        for token in line.split_whitespace() {
+            let value: u16 = token.parse().expect("Invalid color value");
+            let b = match max_value {
+                Some(max_value) => (value as f32 / max_value as f32) as u8,
+                None => value as u8,
+            };
+            bytes.push(b);
+        }
+    }
+
+    Ok(ImageData::Graymap8(bytes))
 }
 
 fn read_pgm_binary<R: Read>(
@@ -257,16 +290,66 @@ fn read_pgm_binary<R: Read>(
     height: usize,
     max_value: Option<u16>,
 ) -> io::Result<ImageData> {
-    unimplemented!()
+    let size = match max_value {
+        Some(max_value) if max_value >= 256 => 2,
+        _ => 1,
+    };
+    if size != 1 {
+        unimplemented!();
+    }
+    let byte_count = height * width * size;
+    let mut buf = vec![0u8; byte_count];
+    reader.read_exact(&mut buf)?;
+    Ok(ImageData::Bitmap(buf))
 }
 
 fn read_ppm_ascii<R: Read>(
-    reader: &mut R,
+    reader: &mut BufReader<R>,
     width: usize,
     height: usize,
     max_value: Option<u16>,
 ) -> io::Result<ImageData> {
-    unimplemented!()
+    let pixel_count = height * width;
+    let mut pixels = Vec::with_capacity(pixel_count);
+    let mut line = String::new();
+
+    let mut next_line = || -> io::Result<String> {
+        line.clear();
+        loop {
+            let bytes_read = reader.read_line(&mut line)?;
+            if bytes_read == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Unexpected EOF",
+                ));
+            }
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                return Ok(trimmed.to_string());
+            }
+            line.clear();
+        }
+    };
+
+    let mut rgb_index = 0;
+    let mut rgb = [0, 0, 0];
+    while pixels.len() < pixel_count {
+        let line = next_line()?;
+        for token in line.split_whitespace() {
+            let value: u16 = token.parse().expect("Invalid color value");
+            let b = match max_value {
+                Some(max_value) => (value as f32 / max_value as f32) as u8,
+                None => value as u8,
+            };
+            rgb[rgb_index] = b;
+            rgb_index += 1;
+            if rgb_index == 3 {
+                pixels.push(Color8::new(rgb[0], rgb[1], rgb[2]));
+            }
+        }
+    }
+
+    Ok(ImageData::Pixmap(pixels))
 }
 
 fn read_ppm_binary<R: Read>(
@@ -275,10 +358,22 @@ fn read_ppm_binary<R: Read>(
     height: usize,
     max_value: Option<u16>,
 ) -> io::Result<ImageData> {
-    unimplemented!()
+    let size = match max_value {
+        Some(max_value) if max_value >= 256 => 2,
+        _ => 1,
+    };
+    if size != 1 {
+        unimplemented!();
+    }
+    let byte_count = height * width * size;
+    let mut buf = vec![0u8; byte_count];
+    reader.read_exact(&mut buf)?;
+    Ok(ImageData::Bitmap(buf))
 }
 
-fn read_header<R: Read>(reader: &mut BufReader<R>) -> io::Result<(String, usize, usize, Option<u16>)> {
+fn read_header<R: Read>(
+    reader: &mut BufReader<R>,
+) -> io::Result<(String, usize, usize, Option<u16>)> {
     let mut line = String::new();
 
     // Helper to read the next non-comment, non-empty line
