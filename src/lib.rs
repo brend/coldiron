@@ -151,19 +151,25 @@ impl Image {
     }
 
     pub fn read_from<R: Read>(reader: &mut R) -> io::Result<Self> {
-        let mut reader = BufReader::new(reader)
+        let mut reader = BufReader::new(reader);
         let (magic_number, width, height, max_value) = read_header(&mut reader)?;
-        let format = Format::from_magic_number(&magic_number)?;
-        let encoding = Encoding::from_magic_number(&magic_number)?;
+        let format = Format::from_magic_number(&magic_number).unwrap();
+        let encoding = Encoding::from_magic_number(&magic_number).unwrap();
         let data = match (format, encoding) {
             (Format::Bitmap, Encoding::Ascii) => read_pbm_ascii(&mut reader, width, height),
             (Format::Bitmap, Encoding::Binary) => read_pbm_binary(&mut reader, width, height),
-            (Format::Graymap, Encoding::Ascii) => read_pgm_ascii(&mut reader, width, height, max_value),
+            (Format::Graymap, Encoding::Ascii) => {
+                read_pgm_ascii(&mut reader, width, height, max_value)
+            }
             (Format::Graymap, Encoding::Binary) => {
                 read_pgm_binary(&mut reader, width, height, max_value)
             }
-            (Format::Pixmap, Encoding::Ascii) => read_ppm_ascii(&mut reader, width, height, max_value),
-            (Format::Pixmap, Encoding::Binary) => read_ppm_binary(&mut reader, width, height, max_value),
+            (Format::Pixmap, Encoding::Ascii) => {
+                read_ppm_ascii(&mut reader, width, height, max_value)
+            }
+            (Format::Pixmap, Encoding::Binary) => {
+                read_ppm_binary(&mut reader, width, height, max_value)
+            }
             _ => unimplemented!(),
         }?;
 
@@ -176,9 +182,13 @@ impl Image {
     }
 }
 
-fn read_pbm_ascii<R: Read>(reader: &mut BufReader<R>, width: usize, height: usize) -> io::Result<ImageData> {
+fn read_pbm_ascii<R: Read>(
+    reader: &mut BufReader<R>,
+    width: usize,
+    height: usize,
+) -> io::Result<ImageData> {
     let byte_count = height * width;
-    let mut bytes = vec![0u8; byte_count];
+    let mut bytes = Vec::with_capacity(byte_count);
     let mut line = String::new();
 
     let mut next_line = || -> io::Result<String> {
@@ -199,7 +209,7 @@ fn read_pbm_ascii<R: Read>(reader: &mut BufReader<R>, width: usize, height: usiz
         }
     };
 
-    for _ in 0..byte_count {
+    while bytes.len() < byte_count {
         let line = next_line()?;
         for token in line.chars() {
             if token.is_whitespace() {
@@ -213,7 +223,11 @@ fn read_pbm_ascii<R: Read>(reader: &mut BufReader<R>, width: usize, height: usiz
     Ok(ImageData::Bitmap(bytes))
 }
 
-fn read_pbm_binary<R: Read>(reader: &mut BufReader<R>, width: usize, height: usize) -> io::Result<ImageData> {
+fn read_pbm_binary<R: Read>(
+    reader: &mut BufReader<R>,
+    width: usize,
+    height: usize,
+) -> io::Result<ImageData> {
     let byte_count = height * ((width + 7) / 8);
     let mut buf = vec![0u8; byte_count];
     reader.read_exact(&mut buf)?;
@@ -221,7 +235,7 @@ fn read_pbm_binary<R: Read>(reader: &mut BufReader<R>, width: usize, height: usi
     let mut bytes = vec![0u8; height * width];
     for b in buf {
         for i in 0..8 {
-            let bit = if b & (1 << i) == 0 { 0 } else { 1};
+            let bit = if b & (1 << i) == 0 { 0 } else { 1 };
             bytes.push(bit)
         }
     }
@@ -264,15 +278,14 @@ fn read_ppm_binary<R: Read>(
     unimplemented!()
 }
 
-fn read_header<R: Read>(reader: &mut R) -> io::Result<(String, usize, usize, Option<u16>)> {
-    let mut buf_reader = BufReader::new(reader);
+fn read_header<R: Read>(reader: &mut BufReader<R>) -> io::Result<(String, usize, usize, Option<u16>)> {
     let mut line = String::new();
 
     // Helper to read the next non-comment, non-empty line
     let mut next_line = || -> io::Result<String> {
         line.clear();
         loop {
-            let bytes_read = buf_reader.read_line(&mut line)?;
+            let bytes_read = reader.read_line(&mut line)?;
             if bytes_read == 0 {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
