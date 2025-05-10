@@ -9,9 +9,12 @@ async fn main() {
     loop {
         let w = screen_width();
         let h = screen_height();
-        let sx = 40.0;
-        let ox = (w - sx * (src.width()+1) as f32) / 2.0;
-        let oy = (h - sx * (src.height()+1) as f32) / 2.0;
+        let border = 0.0;
+        let sx = w / src.width() as f32;
+        let sy = h / src.height() as f32;
+        let sx = if sx > sy { sy } else { sx };
+        let ox = (w - border - sx * (src.width() + 1) as f32) / 2.0;
+        let oy = (h - border - sx * (src.height() + 1) as f32) / 2.0;
 
         for y in 0..src.height() {
             for x in 0..src.width() {
