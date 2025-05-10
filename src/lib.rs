@@ -34,8 +34,8 @@ pub enum Encoding {
 impl Encoding {
     pub fn from_magic_number(magic_number: &str) -> Option<Encoding> {
         match magic_number {
-            "P1" | "P3" | "P5" => Some(Encoding::Ascii),
-            "P2" | "P4" | "P6" => Some(Encoding::Binary),
+            "P1" | "P2" | "P3" => Some(Encoding::Ascii),
+            "P4" | "P5" | "P6" => Some(Encoding::Binary),
             _ => None,
         }
     }
@@ -274,7 +274,7 @@ fn read_pgm_ascii<R: Read>(
         for token in line.split_whitespace() {
             let value: u16 = token.parse().expect("Invalid color value");
             let b = match max_value {
-                Some(max_value) => (value as f32 / max_value as f32) as u8,
+                Some(max_value) => (255.0 * (value as f32 / max_value as f32)) as u8,
                 None => value as u8,
             };
             bytes.push(b);
