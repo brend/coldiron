@@ -3,7 +3,7 @@ use macroquad::prelude::*;
 
 #[macroquad::main("Coldiron")]
 async fn main() {
-    let mut reader = std::fs::File::open("images/feep.pgm").unwrap();
+    let mut reader = std::fs::File::open("images/lightning.pgm").unwrap();
     let src = Image::read_from(&mut reader).unwrap();
 
     loop {
