@@ -1,10 +1,28 @@
-use coldiron::Image;
+use coldiron::{Format, Image, Kernel};
 use macroquad::prelude::*;
 
-#[macroquad::main("Coldiron")]
+#[macroquad::main("Coldiron Netpbm Viewer")]
 async fn main() {
     let mut reader = std::fs::File::open("images/lightning.pgm").unwrap();
-    let src = Image::read_from(&mut reader).unwrap();
+    let mut src = Image::read_from(&mut reader).unwrap();
+
+    let mut dst = Image::new(Format::Graymap, src.width(), src.height());
+    let kernel = Kernel::new(
+        3,
+        vec![
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+            1.0 / 9.0,
+        ],
+    );
+    kernel.apply(&src, &mut dst);
+    kernel.apply(&dst, &mut src);
 
     loop {
         let w = screen_width();
